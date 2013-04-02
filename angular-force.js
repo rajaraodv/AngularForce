@@ -8,7 +8,6 @@
 angular.module('AngularForce', []).
     service('AngularForce', function (SFConfig) {
 
-
         this.login = function (callback) {
             if (SFConfig.client) { //already logged in
                 return callback && callback();
@@ -22,7 +21,6 @@ angular.module('AngularForce', []).
                 return this.loginWeb(callback);
             }
         };
-
 
         /**
          *  setCordovaLoginCred initializes forcetk client in Cordova/PhoneGap apps (not web apps).
