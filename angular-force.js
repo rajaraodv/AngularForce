@@ -3,17 +3,34 @@
  * forcetk.ui(web apps) to do so.
  *
  * @param SFConfig An AngularJS object that is used to store forcetk.client.
- * If
+ *
  */
 angular.module('AngularForce', []).
     service('AngularForce', function (SFConfig) {
+
+
+        this.login = function (callback) {
+            if (SFConfig.client) { //already logged in
+                return callback && callback();
+            }
+            if (cordova) { //Cordova / PhoneGap
+                return this.setCordovaLoginCred(callback);
+            } else if (typeof getSFSessionId === 'function') { //visualforce
+                //todo
+                return callback();
+            } else { //standalone / heroku / localhost
+                return this.loginWeb(callback);
+            }
+        };
+
+
         /**
          *  setCordovaLoginCred initializes forcetk client in Cordova/PhoneGap apps (not web apps).
          *  Usage: Import AngularForce module into your initial view and call AngularForce.setCordovaLoginCred
          *
          *  Note: This should be used when SalesForce *native-phonegap* plugin is used for logging in to SF
          */
-        this.setCordovaLoginCred = function () {
+        this.setCordovaLoginCred = function (callback) {
             if (!cordova) throw 'Cordova/PhoneGap not found.';
 
             //Call getAuthCredentials to get the initial session credentials
@@ -22,6 +39,7 @@ angular.module('AngularForce', []).
             //register to receive notifications when autoRefreshOnForeground refreshes the sfdc session
             document.addEventListener("salesforceSessionRefresh", salesforceSessionRefreshed, false);
             function salesforceSessionRefreshed(creds) {
+
                 // Depending on how we come into this method, `creds` may be callback data from the auth
                 // plugin, or an event fired from the plugin.  The data is different between the two.
                 var credsData = creds;
@@ -31,6 +49,7 @@ angular.module('AngularForce', []).
                 SFConfig.client = new forcetk.Client(credsData.clientId, credsData.loginUrl);
                 SFConfig.client.setSessionToken(credsData.accessToken, apiVersion, credsData.instanceUrl);
                 SFConfig.client.setRefreshToken(credsData.refreshToken);
+                callback();
             }
 
             function getAuthCredentialsError(error) {
@@ -43,7 +62,7 @@ angular.module('AngularForce', []).
          * Usage: Import AngularForce and call AngularForce.login(callback)
          * @param callback A callback function (usually in the same controller that initiated login)
          */
-        this.login = function (callback) {
+        this.loginWeb = function (callback) {
             if (SFConfig.client) { //already loggedin
                 return callback();
             }
