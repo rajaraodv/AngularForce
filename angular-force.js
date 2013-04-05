@@ -1,22 +1,37 @@
 /**
- * AngularForce Module helps with logging into Salesforce. It internally depends on Cordova(Phonegap apps) and
+ * AngularForce library provides glue b/w Angular.js and Saleforce's forcetk libraries to help easily build
+ * AngularJS based Salesforce apps.
+ *
+ * It contains the following two Angular Modules.
+ * 1. AngularForce - Helps with authentication with Salesforce
+ * 2. AngularForceObjectFactory - Creates & returns different kind of AngularForceObject class based on the params.
+ *
+ */
+
+
+/**
+ * AngularForce Module helps with authentication with Salesforce. It internally depends on Cordova(Phonegap apps) and
  * forcetk.ui(web apps) to do so.
  *
  * @param SFConfig An AngularJS object that is used to store forcetk.client.
- * If
  */
 angular.module('AngularForce', []).
     service('AngularForce', function (SFConfig) {
 
-        this.login = function(callback) {
+        this.authenticated = function () {
+            return SFConfig.client ? true : false;
+        };
+
+        this.login = function (callback) {
             if (SFConfig.client) { //already logged in
                 return callback && callback();
             }
 
             if (location.protocol === 'file:' && cordova) { //Cordova / PhoneGap
                 return this.setCordovaLoginCred(callback);
-            } else if(typeof getSFSessionId === 'function') { //visualforce
+            } else if (typeof getSFSessionId === 'function') { //visualforce
                 //??
+                return null;
             } else { //standalone / heroku / localhost
                 return this.loginWeb(callback);
             }
@@ -60,27 +75,47 @@ angular.module('AngularForce', []).
          * @param callback A callback function (usually in the same controller that initiated login)
          */
         this.loginWeb = function (callback) {
-            if(!SFConfig) throw 'Must set app.SFConfig where app is your AngularJS app';
+            if (!SFConfig) throw 'Must set app.SFConfig where app is your AngularJS app';
 
             if (SFConfig.client) { //already loggedin
                 return callback();
             }
-            var ftkClientUI = new forcetk.ClientUI(SFConfig.sfLoginURL, SFConfig.consumerKey, SFConfig.oAuthCallbackURL,
-                function forceOAuthUI_successHandler(forcetkClient) { // successCallback
-                    console.log('OAuth success!');
+            var ftkClientUI = getForceTKClientUI();
+            ftkClientUI.login();
+        };
+
+        this.oauthCallback = function (callbackString) {
+            var ftkClientUI = getForceTKClientUI();
+            ftkClientUI.oauthCallback(callbackString);
+        };
+
+        this.logout = function (callbackString) {
+            if (SFConfig.client) {
+                var ftkClientUI = getForceTKClientUI();
+                ftkClientUI.client = SFConfig.client;
+                ftkClientUI.logout(callbackString);
+            }
+        };
+
+        /**
+         * Creates a forcetk.clientUI object using information from SFConfig. Please set SFConfig information
+         * in init.js (or via environment variables).
+         *
+         * @returns {forcetk.ClientUI}
+         */
+        function getForceTKClientUI() {
+            return new forcetk.ClientUI(SFConfig.sfLoginURL, SFConfig.consumerKey, SFConfig.oAuthCallbackURL,
+                function forceOAuthUI_successHandler(forcetkClient) {
+                    console.log('OAuth callback success!');
                     SFConfig.client = forcetkClient;
                     SFConfig.client.serviceURL = forcetkClient.instanceUrl
                         + '/services/data/'
                         + forcetkClient.apiVersion;
-
-                    return callback();
-                });
-
-            //Set proxyUrl BEFORE login
-            ftkClientUI.client.proxyUrl = SFConfig.proxyUrl;
-
-            ftkClientUI.login();
-        };
+                },
+                function forceOAuthUI_errorHandler() {
+                },
+                SFConfig.proxyUrl);
+        }
     });
 
 /**
@@ -103,6 +138,10 @@ angular.module('AngularForceObjectFactory', []).factory('AngularForceObjectFacto
         var type = params.type;
         var fields = params.fields;
         var where = params.where;
+        var limit = params.limit;
+        if (!limit) {
+            limit = 25;
+        }
 
         /**
          * AngularForceObject acts like a super-class for actual SF Objects. It provides wrapper to forcetk ajax apis
@@ -134,10 +173,19 @@ angular.module('AngularForceObjectFactory', []).factory('AngularForceObjectFacto
             return AngularForceObject.remove(this, cb);
         };
 
-        AngularForceObject.query = function (successCB, failureCB) {
-            var soql = 'SELECT ' + fields.join(',') + ' FROM ' + type + ' ' + where;
+        /*RSC Modified to accept optional SOQL*/
+        AngularForceObject.query = function (successCB, failureCB, soql) {
+            if (!soql) {
+                soql = 'SELECT ' + fields.join(',') + ' FROM ' + type + ' ' + where + ' LIMIT ' + limit;
+            }
             return SFConfig.client.query(soql, successCB, failureCB);
         };
+
+        /*RSC And who doesn't love SOSL*/
+        AngularForceObject.search = function (successCB, failureCB, sosl) {
+            return SFConfig.client.search(sosl, successCB, failureCB);
+        };
+
 
         AngularForceObject.get = function (params, successCB, failureCB) {
             return SFConfig.client.retrieve(type, params.id, fields.join(), function (data) {
@@ -160,7 +208,6 @@ angular.module('AngularForceObjectFactory', []).factory('AngularForceObjectFacto
 
         AngularForceObject.update = function (obj, successCB, failureCB) {
             var data = AngularForceObject.getChangedData(obj);
-            debugger;
             return SFConfig.client.update(type, obj.Id, data, function (data) {
                 if (data && !angular.isArray(data)) {
                     return successCB(new AngularForceObject(data))
@@ -201,3 +248,4 @@ angular.module('AngularForceObjectFactory', []).factory('AngularForceObjectFacto
 
     return AngularForceObjectFactory;
 });
+
