@@ -6,6 +6,7 @@
  * 1. AngularForce - Helps with authentication with Salesforce
  * 2. AngularForceObjectFactory - Creates & returns different kind of AngularForceObject class based on the params.
  *
+ * @author Raja Rao DV @rajaraodv
  */
 
 
@@ -29,9 +30,9 @@ angular.module('AngularForce', []).
 
             if (location.protocol === 'file:' && cordova) { //Cordova / PhoneGap
                 return this.setCordovaLoginCred(callback);
-            } else if (typeof getSFSessionId === 'function') { //visualforce
-                //??
-                return null;
+            } else if (typeof getSessionId === 'function') { //visualforce
+                //(Have a global func. called getSessionId tht sets sessionId from VF to SFConfig.sessionId)
+                return this.loginVF();
             } else { //standalone / heroku / localhost
                 return this.loginWeb(callback);
             }
@@ -83,6 +84,20 @@ angular.module('AngularForce', []).
             var ftkClientUI = getForceTKClientUI();
             ftkClientUI.login();
         };
+
+        /**
+         * Login to VF. Technically, you are already logged in when running the app, but we need this function
+         * to set sessionId to SFConfig.client (forcetkClient)
+         *
+         * Usage: Import AngularForce and call AngularForce.login() while running in VF page.
+         *
+         * @param callback A callback function (usually in the same controller that initiated login)
+         */
+        this.loginVF = function () {
+            SFConfig.client = new forcetk.Client();
+            SFConfig.client.setSessionToken(SFConfig.sessionId);
+        };
+
 
         this.oauthCallback = function (callbackString) {
             var ftkClientUI = getForceTKClientUI();
@@ -205,6 +220,13 @@ angular.module('AngularForceObjectFactory', []).factory('AngularForceObjectFacto
             var data = AngularForceObject.getNewObjectData(obj);
             return SFConfig.client.create(type, data, function (data) {
                 if (data && !angular.isArray(data)) {
+                    //Salesforce returns "id" in lowercase when an object is
+                    //created. Where as it returns id as "Id" for every other call.
+                    // This might confuse people, so change "id" to "Id".
+                    if(data.id) {
+                        data.Id =  data.id;
+                        delete data.id;
+                    }
                     return successCB(new AngularForceObject(data))
                 }
                 return successCB(data);
