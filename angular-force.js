@@ -19,6 +19,8 @@
 angular.module('AngularForce', []).
     service('AngularForce', function (SFConfig) {
 
+        this.version = '0.1';
+
         this.inVisualforce = document.location.href.indexOf('visual.force.com') > 0;
 
         this.authenticated = function () {
